@@ -1,0 +1,112 @@
+
+import re
+def split_string(part_name):
+    
+    # Split the string by backslash (\) to get the last part
+    parts = part_name.split('\\')
+    last_part = parts[-1]
+
+    # Split the last part by forward slash (/)
+    sub_parts = last_part.split('/')
+
+    # Get the part before the last forward slash (if exists)
+    name_before_last_slash = sub_parts[0]
+
+    # Remove consecutive occurrences of special characters
+    name_without_special_chars = re.sub(r'([*_:;"<>,.?+=-])\1+', r'\1', name_before_last_slash)
+
+    # Check if "RH", "R", "L", or "LH" appear at the end and remove them
+    name_without_special_chars = re.sub(r'(_RH|_LEFT|_RIGHT|_R|_L|_LH|_LHD|RH|LH|LEFT|RIGHT|-RH|-LEFT|-RIGHT|-R|-L|-LH|-LEFT|-RIGHT)$', '', name_without_special_chars)
+
+    # Remove "HL_" or "RL_" from the beginning of the name
+    name_without_prefix = re.sub(r'^(HL_|RL_|RL|HL)', '', name_without_special_chars)
+    
+    # Remove integers from the name
+    name_without_integers = re.sub(r'\d', '', name_without_prefix)
+    names_without_space = name_without_integers.replace(" ", "")
+    final_part_name = names_without_space 
+    
+    
+    #mesh_names = ["air", "lens", "housing", "cap", "box", "vent", "heatsink", "reflector", "bezel", "inner", "screen", "fresnel", "lightguide", "lightbar", "flatguide", "bulbshield", "heatshield", "glue", "socle", "bulbholder", "gasket", "circuit", "led", "pcb", "vias", "driver", "fan"]
+
+    #if final_part_name_updated.lower() in [s.lower() for s in mesh_names]:
+      #  final_part_name_updated = final_part_name_updated + "-"
+    #else 
+    
+    # Loop for preventing duplicate naming
+    prefix_a = "s"
+    prefix_b = "-"
+    prefix_sum = prefix_a+prefix_b
+    
+    if final_part_name[0] == "s":
+        return final_part_name
+    else:
+        final_part_name_updated = prefix_sum + final_part_name
+    
+    return  final_part_name_updated
+
+
+part = GetRootPart()  # Get the root part
+bodies = part.GetAllBodies()
+
+body_names = []
+body_names_repeated = {}
+
+for body in bodies:
+    name = body.GetName()  # Get the solid body names
+    new_name = split_string(name)
+    body_names.append(new_name)
+    
+    if new_name in body_names:
+        if new_name not in body_names_repeated:
+            body_names_repeated[new_name] = []
+        body_names_repeated[new_name].append(body)
+        
+for new_name, body in zip(body_names, bodies):
+    body.SetName(new_name)
+
+# Create a list to store the newly created components
+new_components = []
+
+# Create a dictionary to track unique body names
+unique_body_names = {}
+
+# Iterate through the dictionary and create components for bodies with duplicate names
+j = 1  # Initialize the counter
+for name, body_list in body_names_repeated.items():
+    if len(body_list) > 1:  # Check if there are duplicate names
+        selection = BodySelection.Create(*body_list)
+        new_component_result = ComponentHelper.MoveBodiesToComponent(selection, None)
+        
+        # Check if the result is valid
+        if new_component_result.CreatedComponents:
+            # Rename the newly created components to match the repeated body name
+            repeated_body_name = name  # Get the repeated body name
+            selection = ComponentSelection.Create(new_component_result.CreatedComponents[0])  # Get the created component
+            RenameObject.Execute(selection, repeated_body_name)
+    else:
+        # Track unique body names
+        unique_body_names[name] = body_list[0]
+
+# Convert solid bodies with unique names into single components
+for name, body in unique_body_names.items():
+    selection = BodySelection.Create(body)
+    new_component_result = ComponentHelper.MoveBodiesToComponent(selection, None)
+
+# Exclude items from physics
+keywords_to_suppress = ['harness', 'electronic', 'glue', 'pads', 'connector', 'motor']
+
+for body_supp in GetRootPart().GetAllBodies():
+    name_lower = body_supp.GetName().ToLower()
+
+    # Check if the component name is in the list of keywords
+    for keyword in keywords_to_suppress:
+        if re.search(keyword, name_lower):
+            selection = BodySelection.Create(body_supp)
+            suppress = True
+            ViewHelper.SetSuppressForPhysics(selection, suppress)  
+            
+ # Delete empty components
+for component in GetRootPart().Components:
+    selection2 = ComponentSelection.Create(component)
+    ComponentHelper.DeleteEmptyComponents(selection2, None)
